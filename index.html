@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Retirement Simulator</title>
+<meta name="description" content="A free interactive retirement simulator. Project your savings, run Monte Carlo simulations, and see how long your money will last." />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273548;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent-2: #818cf8;
+    --good: #4ade80;
+    --bad: #f87171;
+    --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  header h1 {
+    margin: 0 0 8px;
+    font-size: clamp(28px, 5vw, 42px);
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-weight: 700;
+  }
+  header p { color: var(--muted); margin: 0; font-size: 16px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  }
+  .panel h2 {
+    margin: 0 0 16px;
+    font-size: 18px;
+    color: var(--accent);
+    letter-spacing: 0.3px;
+  }
+
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .field label .val {
+    color: var(--text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .field input[type="number"], .field input[type="text"] {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(56,189,248,0.18);
+  }
+  .field input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .section-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin: 18px 0 10px;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+  .section-title:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+
+  button {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    color: #0f172a;
+    border: none;
+    padding: 12px 18px;
+    border-radius: 9px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    width: 100%;
+    transition: transform 0.05s, filter 0.15s;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:active { transform: translateY(1px); }
+  button.secondary {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  @media (max-width: 700px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .stat .label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 4px;
+  }
+  .stat .value {
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .good { color: var(--good); }
+  .bad  { color: var(--bad); }
+  .warn { color: var(--warn); }
+
+  .chart-wrap {
+    position: relative;
+    height: 360px;
+    margin-bottom: 14px;
+  }
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .tab {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .tab.active {
+    color: var(--text);
+    border-color: var(--accent);
+    background: rgba(56,189,248,0.1);
+  }
+
+  .summary-msg {
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin-bottom: 18px;
+    font-size: 14px;
+    line-height: 1.5;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+  }
+  .summary-msg.success { border-color: var(--good); background: rgba(74,222,128,0.08); }
+  .summary-msg.fail    { border-color: var(--bad);  background: rgba(248,113,113,0.08); }
+  .summary-msg.warn    { border-color: var(--warn); background: rgba(251,191,36,0.08); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  th:first-child, td:first-child { text-align: left; }
+  .table-wrap { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+  tr.retire-row { background: rgba(56,189,248,0.07); }
+  tr.retire-row td:first-child::after { content: " ← retire"; color: var(--accent); font-size: 11px; }
+
+  footer {
+    text-align: center;
+    margin-top: 40px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  .disclaimer {
+    max-width: 760px;
+    margin: 24px auto 0;
+    padding: 14px 18px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Retirement Simulator</h1>
+    <p>Project your savings, stress-test your plan, and see how long your money lasts.</p>
+  </header>
+
+  <div class="layout">
+
+    <!-- INPUTS -->
+    <div class="panel" id="inputs">
+      <div class="section-title">About you</div>
+      <div class="row2">
+        <div class="field">
+          <label>Current age <span class="val" id="v-age">30</span></label>
+          <input type="number" id="age" value="30" min="18" max="80" />
+        </div>
+        <div class="field">
+          <label>Retire at <span class="val" id="v-retire">65</span></label>
+          <input type="number" id="retireAge" value="65" min="40" max="85" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Plan until age <span class="val" id="v-end">95</span></label>
+        <input type="number" id="endAge" value="95" min="60" max="110" />
+      </div>
+
+      <div class="section-title">Savings & income</div>
+      <div class="field">
+        <label>Current savings ($)</label>
+        <input type="number" id="currentSavings" value="50000" min="0" step="1000" />
+      </div>
+      <div class="field">
+        <label>Annual contribution ($/yr)</label>
+        <input type="number" id="contribution" value="12000" min="0" step="500" />
+      </div>
+      <div class="field">
+        <label>Contribution growth (% per year) <span class="val" id="v-cgrow">2.0%</span></label>
+        <input type="range" id="contribGrowth" value="2" min="0" max="10" step="0.1" />
+      </div>
+
+      <div class="section-title">Retirement</div>
+      <div class="field">
+        <label>Annual spending in retirement ($, today's $)</label>
+        <input type="number" id="spending" value="60000" min="0" step="1000" />
+      </div>
+      <div class="field">
+        <label>Other income in retirement ($/yr, today's $)</label>
+        <input type="number" id="otherIncome" value="20000" min="0" step="500" />
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">e.g. Social Security, pension</div>
+      </div>
+
+      <div class="section-title">Market assumptions</div>
+      <div class="field">
+        <label>Expected return (%) <span class="val" id="v-ret">7.0%</span></label>
+        <input type="range" id="returnRate" value="7" min="1" max="12" step="0.1" />
+      </div>
+      <div class="field">
+        <label>Return volatility (%) <span class="val" id="v-vol">15%</span></label>
+        <input type="range" id="volatility" value="15" min="0" max="30" step="0.5" />
+      </div>
+      <div class="field">
+        <label>Inflation (%) <span class="val" id="v-inf">2.5%</span></label>
+        <input type="range" id="inflation" value="2.5" min="0" max="8" step="0.1" />
+      </div>
+
+      <button id="run" style="margin-top:8px;">Run simulation</button>
+      <button id="reset" class="secondary" style="margin-top:8px;">Reset to defaults</button>
+    </div>
+
+    <!-- RESULTS -->
+    <div>
+      <div id="summary" class="summary-msg">Set your numbers and click <strong>Run simulation</strong>.</div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="label">At retirement</div>
+          <div class="value" id="s-retire">—</div>
+          <div class="sub" id="s-retire-sub">portfolio value</div>
+        </div>
+        <div class="stat">
+          <div class="label">End of plan</div>
+          <div class="value" id="s-end">—</div>
+          <div class="sub" id="s-end-sub">remaining balance</div>
+        </div>
+        <div class="stat">
+          <div class="label">Total contributed</div>
+          <div class="value" id="s-contrib">—</div>
+          <div class="sub">over working years</div>
+        </div>
+        <div class="stat">
+          <div class="label">Success rate</div>
+          <div class="value" id="s-success">—</div>
+          <div class="sub" id="s-success-sub">Monte Carlo (1,000 runs)</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="tabs">
+          <div class="tab active" data-tab="chart">Wealth chart</div>
+          <div class="tab" data-tab="mc">Monte Carlo fan</div>
+          <div class="tab" data-tab="table">Year-by-year</div>
+        </div>
+
+        <div id="pane-chart">
+          <div class="chart-wrap"><canvas id="wealthChart"></canvas></div>
+        </div>
+
+        <div id="pane-mc" style="display:none;">
+          <div class="chart-wrap"><canvas id="mcChart"></canvas></div>
+          <div style="font-size:12px;color:var(--muted);">
+            Each gray line is one of 200 randomly-drawn market histories. Bands show the 10th–90th and 25th–75th percentile range across 1,000 runs.
+          </div>
+        </div>
+
+        <div id="pane-table" style="display:none;">
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Age</th><th>Year</th><th>Contributed</th><th>Spent</th>
+                <th>Return</th><th>Balance</th><th>Real $</th>
+              </tr></thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="disclaimer">
+        <strong>Heads up:</strong> this tool is for education and rough planning only. It uses simplified assumptions
+        (a single asset class, normal-distributed returns, no taxes or fees, constant real spending) and is not financial advice.
+        Real-world outcomes depend on tax treatment, sequence-of-returns risk, healthcare costs, and many other factors.
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p>Built as a single static HTML page. Host it anywhere — GitHub Pages, Netlify, Vercel, S3, your own server.</p>
+  </footer>
+</div>
+
+<script>
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const fmt$ = n => {
+  if (!isFinite(n)) return '—';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1e9) return sign + '$' + (abs/1e9).toFixed(2) + 'B';
+  if (abs >= 1e6) return sign + '$' + (abs/1e6).toFixed(2) + 'M';
+  if (abs >= 1e3) return sign + '$' + (abs/1e3).toFixed(0) + 'K';
+  return sign + '$' + abs.toFixed(0);
+};
+const fmt$Full = n => isFinite(n) ? n.toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}) : '—';
+
+// Box-Muller normal sample
+function randNormal() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// ---------- live label updates ----------
+const liveBindings = [
+  ['age','v-age',v=>v],
+  ['retireAge','v-retire',v=>v],
+  ['endAge','v-end',v=>v],
+  ['contribGrowth','v-cgrow',v=>(+v).toFixed(1)+'%'],
+  ['returnRate','v-ret',v=>(+v).toFixed(1)+'%'],
+  ['volatility','v-vol',v=>(+v).toFixed(0)+'%'],
+  ['inflation','v-inf',v=>(+v).toFixed(1)+'%'],
+];
+liveBindings.forEach(([id,vid,fn])=>{
+  const el = $(id), label = $(vid);
+  if (!el || !label) return;
+  const update = () => label.textContent = fn(el.value);
+  el.addEventListener('input', update);
+  update();
+});
+
+// ---------- core deterministic simulation ----------
+function simulateDeterministic(p) {
+  const years = p.endAge - p.age;
+  const out = [];
+  let bal = p.currentSavings;
+  let contrib = p.contribution;
+  for (let i = 0; i <= years; i++) {
+    const age = p.age + i;
+    const isWorking = age < p.retireAge;
+    const yearsFromNow = i;
+    const inflFactor = Math.pow(1 + p.inflation, yearsFromNow);
+
+    let added = 0, spent = 0;
+    if (isWorking) {
+      added = contrib;
+      bal += contrib;
+    } else {
+      const nominalSpend = p.spending * inflFactor;
+      const nominalIncome = p.otherIncome * inflFactor;
+      const net = Math.max(0, nominalSpend - nominalIncome);
+      spent = net;
+      bal -= net;
+    }
+    const ret = bal * p.returnRate;
+    const balBefore = bal;
+    bal = bal * (1 + p.returnRate);
+
+    out.push({
+      age, year: new Date().getFullYear() + i,
+      contributed: added, spent, ret,
+      balance: bal,
+      realBalance: bal / inflFactor,
+    });
+
+    if (isWorking) contrib *= (1 + p.contribGrowth);
+    if (bal < 0) bal = 0; // floor at 0 (depleted)
+  }
+  return out;
+}
+
+// ---------- Monte Carlo ----------
+function simulateMC(p, runs = 1000) {
+  const years = p.endAge - p.age;
+  const balances = []; // [run][year]
+  let successes = 0;
+  for (let r = 0; r < runs; r++) {
+    let bal = p.currentSavings;
+    let contrib = p.contribution;
+    const path = [bal];
+    let depleted = false;
+    for (let i = 0; i < years; i++) {
+      const age = p.age + i;
+      const isWorking = age < p.retireAge;
+      const inflFactor = Math.pow(1 + p.inflation, i);
+      if (isWorking) {
+        bal += contrib;
+        contrib *= (1 + p.contribGrowth);
+      } else {
+        const nominalSpend = p.spending * inflFactor;
+        const nominalIncome = p.otherIncome * inflFactor;
+        bal -= Math.max(0, nominalSpend - nominalIncome);
+      }
+      // random return
+      const z = randNormal();
+      const ret = p.returnRate + p.volatility * z;
+      bal = bal * (1 + ret);
+      if (bal <= 0) { bal = 0; depleted = true; }
+      path.push(bal);
+    }
+    if (!depleted) successes++;
+    balances.push(path);
+  }
+  // compute percentiles year by year
+  const T = years + 1;
+  const pcts = { p10:[], p25:[], p50:[], p75:[], p90:[] };
+  for (let t = 0; t < T; t++) {
+    const col = balances.map(p => p[t]).sort((a,b)=>a-b);
+    pcts.p10.push(col[Math.floor(0.10*runs)]);
+    pcts.p25.push(col[Math.floor(0.25*runs)]);
+    pcts.p50.push(col[Math.floor(0.50*runs)]);
+    pcts.p75.push(col[Math.floor(0.75*runs)]);
+    pcts.p90.push(col[Math.floor(0.90*runs)]);
+  }
+  // sample paths for the fan
+  const sample = [];
+  for (let i = 0; i < 200; i++) sample.push(balances[Math.floor(Math.random()*runs)]);
+  return { successRate: successes / runs, percentiles: pcts, samplePaths: sample };
+}
+
+// ---------- chart instances ----------
+let wealthChart, mcChart;
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = 'rgba(148,163,184,0.15)';
+Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+function renderWealthChart(rows, p) {
+  const ages = rows.map(r => r.age);
+  const nominal = rows.map(r => r.balance);
+  const real = rows.map(r => r.realBalance);
+  const retireIdx = ages.indexOf(p.retireAge);
+  const ctx = $('wealthChart').getContext('2d');
+  if (wealthChart) wealthChart.destroy();
+  wealthChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ages,
+      datasets: [
+        {
+          label: 'Nominal balance',
+          data: nominal,
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56,189,248,0.15)',
+          fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2,
+        },
+        {
+          label: 'Real (today\'s $) balance',
+          data: real,
+          borderColor: '#818cf8',
+          borderDash: [6,4],
+          fill: false, tension: 0.25, pointRadius: 0, borderWidth: 2,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            title: items => 'Age ' + items[0].label,
+            label: ctx => ctx.dataset.label + ': ' + fmt$Full(ctx.parsed.y),
+          }
+        },
+        annotation: {}
+      },
+      scales: {
+        x: { title: { display: true, text: 'Age' } },
+        y: {
+          title: { display: true, text: 'Portfolio value' },
+          ticks: { callback: v => fmt$(v) }
+        }
+      }
+    },
+    plugins: [{
+      id: 'retireLine',
+      afterDraw(chart) {
+        if (retireIdx < 0) return;
+        const x = chart.scales.x.getPixelForValue(p.retireAge);
+        const top = chart.chartArea.top, bot = chart.chartArea.bottom;
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.strokeStyle = '#fbbf24';
+        ctx.setLineDash([5,4]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bot); ctx.stroke();
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = '11px sans-serif';
+        ctx.fillText('Retire', x + 4, top + 12);
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+function renderMCChart(mc, p) {
+  const years = p.endAge - p.age;
+  const labels = Array.from({length: years+1}, (_,i) => p.age + i);
+  const ctx = $('mcChart').getContext('2d');
+  if (mcChart) mcChart.destroy();
+  const sampleDatasets = mc.samplePaths.map(path => ({
+    data: path,
+    borderColor: 'rgba(148,163,184,0.10)',
+    borderWidth: 1,
+    pointRadius: 0,
+    fill: false,
+    tension: 0.1,
+    order: 5,
+  }));
+  mcChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        ...sampleDatasets,
+        {
+          label: '10th–90th %ile',
+          data: mc.percentiles.p90,
+          borderColor: 'transparent',
+          backgroundColor: 'rgba(56,189,248,0.10)',
+          fill: '+1', pointRadius: 0, order: 4,
+        },
+        { data: mc.percentiles.p10, borderColor: 'transparent', pointRadius: 0, fill: false, order: 4, label: '_p10' },
+        {
+          label: '25th–75th %ile',
+          data: mc.percentiles.p75,
+          borderColor: 'transparent',
+          backgroundColor: 'rgba(56,189,248,0.20)',
+          fill: '+1', pointRadius: 0, order: 3,
+        },
+        { data: mc.percentiles.p25, borderColor: 'transparent', pointRadius: 0, fill: false, order: 3, label: '_p25' },
+        {
+          label: 'Median',
+          data: mc.percentiles.p50,
+          borderColor: '#38bdf8',
+          borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0.25, order: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { filter: it => it.text && !it.text.startsWith('_') && it.text !== '' }
+        },
+        tooltip: {
+          filter: ti => ['Median','10th–90th %ile','25th–75th %ile'].includes(ti.dataset.label),
+          callbacks: {
+            title: items => 'Age ' + items[0].label,
+            label: ctx => ctx.dataset.label + ': ' + fmt$Full(ctx.parsed.y),
+          }
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Age' } },
+        y: { title: { display: true, text: 'Portfolio value' }, ticks: { callback: v => fmt$(v) } }
+      }
+    }
+  });
+}
+
+function renderTable(rows, p) {
+  const tb = $('tableBody');
+  tb.innerHTML = '';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    if (r.age === p.retireAge) tr.className = 'retire-row';
+    tr.innerHTML = `
+      <td>${r.age}</td>
+      <td>${r.year}</td>
+      <td>${fmt$Full(r.contributed)}</td>
+      <td>${fmt$Full(r.spent)}</td>
+      <td>${fmt$Full(r.ret)}</td>
+      <td>${fmt$Full(r.balance)}</td>
+      <td>${fmt$Full(r.realBalance)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
+// ---------- main ----------
+function readParams() {
+  return {
+    age: +$('age').value,
+    retireAge: +$('retireAge').value,
+    endAge: +$('endAge').value,
+    currentSavings: +$('currentSavings').value,
+    contribution: +$('contribution').value,
+    contribGrowth: +$('contribGrowth').value / 100,
+    spending: +$('spending').value,
+    otherIncome: +$('otherIncome').value,
+    returnRate: +$('returnRate').value / 100,
+    volatility: +$('volatility').value / 100,
+    inflation: +$('inflation').value / 100,
+  };
+}
+
+function run() {
+  const p = readParams();
+
+  // validation
+  if (p.retireAge <= p.age) { showSummary('Retirement age must be greater than current age.', 'fail'); return; }
+  if (p.endAge <= p.retireAge) { showSummary('Plan-until age must be greater than retirement age.', 'fail'); return; }
+
+  const rows = simulateDeterministic(p);
+  const retireRow = rows.find(r => r.age === p.retireAge);
+  const endRow = rows[rows.length - 1];
+  const totalContrib = rows.filter(r => r.age < p.retireAge).reduce((s,r) => s + r.contributed, 0);
+
+  $('s-retire').textContent = fmt$(retireRow.balance);
+  $('s-retire-sub').textContent = `at age ${p.retireAge} (${fmt$(retireRow.realBalance)} in today's $)`;
+  $('s-end').textContent = fmt$(endRow.balance);
+  $('s-end-sub').textContent = `at age ${p.endAge} (${fmt$(endRow.realBalance)} in today's $)`;
+  $('s-end').className = 'value ' + (endRow.balance > 0 ? 'good' : 'bad');
+  $('s-contrib').textContent = fmt$(totalContrib);
+
+  renderWealthChart(rows, p);
+  renderTable(rows, p);
+
+  // Monte Carlo
+  const mc = simulateMC(p, 1000);
+  $('s-success').textContent = (mc.successRate * 100).toFixed(0) + '%';
+  $('s-success').className = 'value ' + (mc.successRate >= 0.85 ? 'good' : mc.successRate >= 0.6 ? 'warn' : 'bad');
+  renderMCChart(mc, p);
+
+  // summary message
+  let cls, msg;
+  if (mc.successRate >= 0.9 && endRow.balance > 0) {
+    cls = 'success';
+    msg = `Strong plan. You'd reach retirement with about <strong>${fmt$(retireRow.balance)}</strong>, and across 1,000 randomized market histories your money lasts to age ${p.endAge} in <strong>${(mc.successRate*100).toFixed(0)}%</strong> of cases.`;
+  } else if (mc.successRate >= 0.7) {
+    cls = 'warn';
+    msg = `Reasonable plan, but with risk. Median path ends at <strong>${fmt$(endRow.balance)}</strong>, and across 1,000 simulations you avoid running out of money <strong>${(mc.successRate*100).toFixed(0)}%</strong> of the time. Consider saving more, retiring later, or spending less.`;
+  } else if (endRow.balance > 0) {
+    cls = 'warn';
+    msg = `The deterministic projection works (<strong>${fmt$(endRow.balance)}</strong> at end), but only <strong>${(mc.successRate*100).toFixed(0)}%</strong> of randomized markets get you there. Sequence-of-returns risk is real here.`;
+  } else {
+    cls = 'fail';
+    const depleteRow = rows.find(r => r.balance <= 0);
+    msg = `This plan runs out of money${depleteRow ? ` around age <strong>${depleteRow.age}</strong>` : ''}. Try saving more, retiring later, lowering retirement spending, or expecting higher other-income (Social Security).`;
+  }
+  showSummary(msg, cls);
+}
+
+function showSummary(html, cls) {
+  const el = $('summary');
+  el.className = 'summary-msg ' + (cls || '');
+  el.innerHTML = html;
+}
+
+// tabs
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const which = t.dataset.tab;
+    $('pane-chart').style.display = which === 'chart' ? '' : 'none';
+    $('pane-mc').style.display    = which === 'mc'    ? '' : 'none';
+    $('pane-table').style.display = which === 'table' ? '' : 'none';
+  });
+});
+
+// reset
+const defaults = {
+  age:30, retireAge:65, endAge:95,
+  currentSavings:50000, contribution:12000, contribGrowth:2,
+  spending:60000, otherIncome:20000,
+  returnRate:7, volatility:15, inflation:2.5,
+};
+$('reset').addEventListener('click', () => {
+  Object.entries(defaults).forEach(([k,v]) => { if ($(k)) $(k).value = v; });
+  liveBindings.forEach(([id,vid,fn])=>{ if($(id)&&$(vid)) $(vid).textContent = fn($(id).value); });
+  run();
+});
+
+$('run').addEventListener('click', run);
+// Run on load
+window.addEventListener('load', run);
+</script>
+</body>
+</html>
